@@ -1,7 +1,7 @@
 module.exports = class Player {
   _user = null;
   _cards = [];
-  _facist = false;
+  _fascist = false;
   _hitler = false;
   _dead = false;
 
@@ -13,14 +13,14 @@ module.exports = class Player {
     return this._user;
   }
 
-  set facist(bool) {
-    this._facist = bool;
+  set fascist(bool) {
+    this._fascist = bool;
   }
 
   set hitler(bool) {
     if (bool) {
       this._hitler = true;
-      this._facist = true;
+      this._fascist = true;
     } else {
       this._hitler = false;
     }
@@ -38,7 +38,7 @@ module.exports = class Player {
     return this._hitler;
   }
 
-  isFacist() {
-    return this._facist;
+  isFascist() {
+    return this._fascist;
   }
 };

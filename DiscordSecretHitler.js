@@ -3,14 +3,12 @@ const Player = require('./Player');
 
 module.exports = class DiscordSecretHitler {
   client = null;
-  game = new SecretHitler();
+  game = null; // TODO: Set to null to disable double instance
 
   gameAdmin = null;
   guild = null;
   textChannel = null;
   voiceChannel = null;
-
-  rounds = 0;
 
   constructor(gameAdmin, players, client) {
     this.game = new SecretHitler(players);
@@ -38,7 +36,7 @@ module.exports = class DiscordSecretHitler {
     console.log('Starting the backend game');
     this.game
       .startGame()
-      .then((r) => {
+      .then(() => {
         console.log('Game is prepared and starting now');
         this.txtChan.send('The game is ready and starting now');
         this.client.user.setActivity('SecretHitler');
@@ -53,13 +51,12 @@ module.exports = class DiscordSecretHitler {
 
   electionPhaseStart() {
     console.log('Step 1) Set the next President');
+    this.txtChan.send(`Playing Round ${this.game.rounds}`);
     this.game.setNextPresident().then(() => {
       const president = this.game.currentPresident;
-      console.log(`Step 1 Result = ${JSON.stringify(president.user)}`);
+      console.log(`Step 1 Result = ${JSON.stringify(president)}`);
       this.txtChan
-        .send(
-          `The next president is <@${president.user.id}>.\nPlease nominate your chancellor and mention him here!`
-        )
+        .send(`The next president is ${president.user}.\nPlease nominate your chancellor and mention him here!`)
         .then(() => {
           this.electionPhaseNominateChancellor();
         })
@@ -71,7 +68,7 @@ module.exports = class DiscordSecretHitler {
   }
 
   electionPhaseNominateChancellor() {
-    console.log('Step 2) Nominate the next Chancellor');
+    console.log('Step 2) Nominate the next Chancellor, just @-Notify him here.');
     const filter = (m) => m.author.id === this.game.currentPresident.user.id;
     this.txtChan
       .awaitMessages(filter, {
@@ -82,9 +79,7 @@ module.exports = class DiscordSecretHitler {
       .then((messages) => {
         const chancellor = messages.first().mentions.users.first();
         console.log(`Step 2 result = ${chancellor}`);
-        this.txtChan.send(
-          `${this.game.currentPresident.user} nominated ${chancellor} as the next chancellor`
-        );
+        this.txtChan.send(`${this.game.currentPresident.user} nominated ${chancellor} as the next chancellor`);
         this.game
           .setNextChancellor(chancellor)
           .then(() => {
@@ -113,46 +108,41 @@ module.exports = class DiscordSecretHitler {
       const yesVotes = results.filter((r) => r.yes).length;
       const noVotes = results.length - yesVotes;
 
-      // make all votes public
+      // make all vote results public
       results.forEach((result) => {
-        this.textChannel.send(
-          `${result.player.user} voted ${result.yes ? 'YES' : 'NO'}`
-        );
+        this.textChannel.send(`${result.player.user} voted ${result.yes ? 'YES' : 'NO'}`);
       });
 
       if (noVotes >= yesVotes) {
         console.log(`The chancellor is not voted`);
         // the chancellor has not been voted
-        this.txtChan.send(
-          `The vote for the next chancellor ${this.game.currentChancellor} has failed.`
-        );
-        this.game.resetNextChancellor();
-        this.game.electionTracker++;
-        if (this.game.electionTracker >= 3) {
-          this.txtChan.send(
-            `You missed three times in a row to select a working government.\nThe chaos spread within your parlament.`
-          );
-          // TODO: Draw the top Policy and play it!
-          this.game.chaosElection = true;
-        }
-        // begin next round
-        this.electionPhaseStart();
+        this.txtChan.send(`The vote for the next chancellor ${this.game.currentChancellor} has failed.`);
+        this.game
+          .chancellorVoteFailed()
+          .then(() => this.electionPhaseStart())
+          .catch((policy) => {
+            this.txtChan.send(
+              `You missed three times in a row to select a working government.\nThe chaos spread within your parlament.`
+            );
+            // TODO: Draw the top Policy and play it!
+            this.txtChan.send(`The top policy card ${policy} was played.`);
+            // begin next round
+            this.electionPhaseStart();
+          });
       } else {
         console.log(`The chancellor got voted`);
+        this.legislativeSelectPolicy();
       }
       console.log('END OF ELECTION PHASE');
     });
   }
 
   voteForNextChancellor(player) {
-    const filter = (reaction, user) =>
-      ['👍', '👎'].includes(reaction.emoji.name) && !user.bot;
+    const filter = (reaction, user) => ['👍', '👎'].includes(reaction.emoji.name) && !user.bot;
 
     return new Promise((resolve, reject) => {
       this.userChat(player.user)
-        .send(
-          `Do you vote for <@${this.game.currentChancellor.user.id}> as the next chancellor?`
-        )
+        .send(`Do you vote for <@${this.game.currentChancellor.user.id}> as the next chancellor?`)
         .then((sentMessage) => {
           sentMessage.react('👍');
           sentMessage.react('👎');
@@ -174,13 +164,171 @@ module.exports = class DiscordSecretHitler {
                 `ERROR while collecting votes for next Chancellor.\n
                 ${JSON.stringify(err)}`
               );
-              sentMessage.reply(
-                'you reacted with neither a thumbs up, nor a thumbs down.'
-              );
+              sentMessage.reply('you reacted with neither a thumbs up, nor a thumbs down.');
               reject(err);
             });
         });
     });
+  }
+
+  legislativeSelectPolicy() {
+    console.log('START LEGISLATIVE');
+    // draw 3 policies to President
+    this.game.drawHandPolicies();
+    console.log(`Drawed three policies: ${JSON.stringify(this.game.handPolicies)}`);
+    // President selects one to discard, gives 2 to Chancellor
+    this.discardHandPolicy(this.game.currentPresident.user).then((card) => {
+      console.log(`President discarded ${card}`);
+      console.log(`Two policies left: ${JSON.stringify(this.game.handPolicies)}`);
+      this.discardHandPolicy(this.game.currentChancellor.user).then((card) => {
+        console.log(`Chancellor discarded ${card}`);
+        // now we play the last hand card
+        this.game.putPolicy().then((policy) => this.executePolicy(policy));
+      });
+    });
+    // Chancellor selects one to discard, the other Policy gets played
+  }
+
+  discardHandPolicy(player) {
+    return new Promise((resolve, reject) => {
+      this.userChat(player)
+        .send(
+          `Please discard one of these policies, just react on it.\n
+        ${this.game.canVeto() ? 'The Veto right can be used' : ''}`
+        )
+        .then(() => {
+          this.game.drawHandPolicies().forEach((policy, index) => {
+            this.userChat(player)
+              .send(`${index}) ${policy}`)
+              .then((sentMessage) => {
+                sentMessage.react('👎');
+                sentMessage
+                  .awaitReactions(filter, { max: 1, time: 60000, errors: ['time'] })
+                  .then((collected) => {
+                    console.log(`Response Reaction => ${collected}`);
+                    const reaction = collected.first();
+                    if (reaction.emoji.name === '👎') {
+                      console.log(reaction);
+                      resolve(reaction);
+                      // TODO: Discard the selected policy
+                    }
+                  })
+                  .catch((err) => {
+                    console.log(
+                      `ERROR while ${player} does not discarded a card.\n
+                ${JSON.stringify(err)}`
+                    );
+                    reject(err);
+                  });
+              });
+          });
+        });
+    });
+  }
+
+  executePolicy(policy) {
+    if (policy === this.game.PolicyCard.LIBERAL) this.electionPhaseStart();
+    const playerLength = this.game.players.length;
+    const fascistAction = this.game.fascistBoard;
+
+    if (playerLength < 7) {
+      switch (fascistAction) {
+        case 3:
+          // currentPresident can see the next three drawPolicies
+          const cards = this.game.drawPolicies.slice(-3);
+          this.userChat(this.game.currentPresident).send(`The next three policies will be ${cards}`);
+          break;
+        case 4:
+        // kill another player
+        case 5:
+          // kill another player, Veto Power is enabled
+          this.killOtherPlayer();
+          break;
+        case 6:
+          this.txtChan.send('The Fascist have taken over and won :-(');
+          this.stopGame();
+          break;
+      }
+    } else {
+      switch (fascistAction) {
+        case 1:
+          if (!playerLength > 8) break;
+        case 2:
+          // investigate a players party
+          this.investigatePlayerParty();
+          break;
+        case 3:
+          // pick the next president
+          break;
+        case 4:
+        // kill another player
+        case 5:
+          // kill another player, Veto power is enabled
+          this.killOtherPlayer();
+          break;
+        case 6:
+          this.txtChan.send('The Fascist have taken over and won :-(');
+          this.stopGame();
+          break;
+      }
+    }
+  }
+
+  investigatePlayerParty() {
+    const filter = (m) => m.author.id === this.game.currentPresident.user.id;
+    this.userChat(this.game.currentPresident.user).send('Please mention the user, you want to inspect.');
+    this.userChat(this.game.currentPresident.user)
+      .awaitMessages(filter, {
+        time: 60000,
+        max: 1,
+        errors: ['time'],
+      })
+      .then((messages) => {
+        const discordPlayer = messages.first().mentions.users.first();
+        this.userChat(this.game.currentPresident.user).send(
+          this.game.isPlayerFascist(discordPlayer) ? `${discordPlayer} is fascist` : `${discordPlayer} is liberal`
+        );
+      });
+  }
+
+  killOtherPlayer() {
+    const filter = (m) => m.author.id === this.game.currentPresident.user.id;
+    this.txtChan.send(
+      `${this.game.currentPresident.user}, you need to kill another player. Please mention your victim.`
+    );
+    this.txtChan
+      .awaitMessages(filter, {
+        time: 60000,
+        max: 1,
+        errors: ['time'],
+      })
+      .then((messages) => {
+        const victim = messages.first().mentions.users.first();
+        console.log(`Killing result = ${victim}`);
+        this.txtChan.send(`Sorry ${victim}, you just got killed :(`);
+        const won = this.game.killPlayer(victim);
+        if (won) {
+          this.txtChan.send('Congratulations, you assassinated Hitler! This time we won!');
+          this.stopGame();
+        }
+      })
+      .catch(() => {
+        this.txtChan.send(`${this.game.currentPresident.user}, still no choice?.`);
+        this.killOtherPlayer();
+      });
+  }
+
+  stopGame() {
+    this.game.players.forEach((player) => {
+      if (player.isHitler()) {
+        this.txtChan.send(`${player.user} was Hitler`);
+      } else {
+        this.txtChan.send(`${player.user} was ${player.isFascist() ? 'FASCIST' : 'LIBERAL'}`);
+      }
+    });
+    this.txtChan.send(`Please stay nice to each other, we all had to play roles. Maybe you wanna try again? ;-)`);
+    this.game = null;
+    this.client.user.setActivity();
   }
 
   get txtChan() {

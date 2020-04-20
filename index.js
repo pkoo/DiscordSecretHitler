@@ -18,11 +18,7 @@ client.on('message', (message) => {
 
   if (command === 'new') {
     console.log('Preparing a new game');
-    runningGame = new DiscordSecretHitler(
-      message.author,
-      message.mentions.users,
-      client
-    );
+    runningGame = new DiscordSecretHitler(message.author, message.mentions.users, client);
     runningGame.guild = message.guild;
     runningGame.textChannel = message.channel;
   } else if (command === 'start') {
@@ -30,12 +26,10 @@ client.on('message', (message) => {
     runningGame.startGame();
   } else if (command === 'stop') {
     console.log('Stopping the current game');
+    if (runningGame) runningGame.stopGame();
     runningGame = null;
-    client.user.setActivity();
   } else if (command === 'info') {
-    return message.reply(
-      'My current job is to offer a Discord Version of https://www.secrethitler.com/'
-    );
+    return message.reply('My current job is to offer a Discord Version of https://www.secrethitler.com/');
   }
 });
 
