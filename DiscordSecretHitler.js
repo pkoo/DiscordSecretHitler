@@ -3,7 +3,7 @@ const Player = require('./Player');
 
 module.exports = class DiscordSecretHitler {
   client = null;
-  game = null; // TODO: Set to null to disable double instance
+  game = new SecretHitler(); // TODO: Set to null to disable double instance
 
   gameAdmin = null;
   guild = null;
@@ -259,6 +259,7 @@ module.exports = class DiscordSecretHitler {
           break;
         case 3:
           // pick the next president
+          this.pickNextPresident();
           break;
         case 4:
         // kill another player
@@ -274,10 +275,28 @@ module.exports = class DiscordSecretHitler {
     }
   }
 
+  pickNextPresident() {
+    const filter = (m) => m.author.id === this.game.currentPresident.user.id;
+    this.txtChan.send(`${this.game.currentPresident.user}, please pick the next president.`);
+    this.txtChan
+      .awaitMessages(filter, {
+        time: 60000,
+        max: 1,
+        errors: ['time'],
+      })
+      .then((messages) => {
+        const next = messages.first().mentions.users.first();
+        this.game.setSepcialPresident(next);
+      })
+      .catch(() => {
+        this.txtChan.send(`${this.game.currentPresident.user}, still no choice?.`);
+      });
+  }
+
   investigatePlayerParty() {
     const filter = (m) => m.author.id === this.game.currentPresident.user.id;
-    this.userChat(this.game.currentPresident.user).send('Please mention the user, you want to inspect.');
-    this.userChat(this.game.currentPresident.user)
+    this.txtChan.send('Please mention the user, you want to inspect.');
+    this.txtChan
       .awaitMessages(filter, {
         time: 60000,
         max: 1,
@@ -308,7 +327,7 @@ module.exports = class DiscordSecretHitler {
         this.txtChan.send(`Sorry ${victim}, you just got killed :(`);
         const won = this.game.killPlayer(victim);
         if (won) {
-          this.txtChan.send('Congratulations, you assassinated Hitler! This time we won!');
+          this.txtChan.send('Congratulations, you assassinated Hitler! This time the Liberals won!');
           this.stopGame();
         }
       })
@@ -319,6 +338,7 @@ module.exports = class DiscordSecretHitler {
   }
 
   stopGame() {
+    // TODO: Setting if the users should be revealed or not
     this.game.players.forEach((player) => {
       if (player.isHitler()) {
         this.txtChan.send(`${player.user} was Hitler`);

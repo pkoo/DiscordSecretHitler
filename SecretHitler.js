@@ -8,8 +8,6 @@ module.exports = class SecretHitler {
 
   players = [];
 
-  hitler = null;
-
   drawPolicies = []; // 6 liberal, 11 fascist
   discardedPolicies = [];
   handPolicies = [];
@@ -17,7 +15,7 @@ module.exports = class SecretHitler {
   liberalBoard = 0;
   fascistBoard = 0;
 
-  specialElection = false;
+  specialElection = null;
   chaosElection = false;
 
   currentPresident = null;
@@ -83,18 +81,31 @@ module.exports = class SecretHitler {
 
   async setNextPresident() {
     this.rounds++;
+    this.lastPresident = this.currentPresident;
 
     // on GameStart, the last und current President are null
     // set next President (currentPresident === null ? random player)
     if (this.currentPresident === null) {
       this.currentPresident = shuffle([...this.alivePlayers])[0];
-      return this.currentPresident;
+    } else if (this.specialElection !== null) {
+      this.currentPresident = this.specialElection;
+      this.specialElection = null;
+    } else {
+      const nextIndex = this.alivePlayers.indexOf(this.lastPresident) + 1;
+      this.currentPresident =
+        nextIndex >= this.alivePlayers.length ? this.alivePlayers[0] : this.alivePlayers[nextIndex];
     }
 
-    this.lastPresident = this.currentPresident;
-    const nextIndex = this.alivePlayers.indexOf(this.lastPresident) + 1;
-    this.currentPresident = nextIndex >= this.alivePlayers.length ? this.alivePlayers[0] : this.alivePlayers[nextIndex];
     return this.currentPresident;
+  }
+
+  async setSepcialPresident(pres) {
+    const pres = this.alivePlayers.filter((p) => p.user.id === pres.id);
+    if (pres.length === 0) {
+      throw new Error('Could not find that player');
+    }
+    this.specialElection = pres;
+    return this.specialElection;
   }
 
   async setNextChancellor(discordChancellor) {
@@ -106,17 +117,16 @@ module.exports = class SecretHitler {
     const chancellorIsDead = chancellor.isDead;
 
     // Chaos election says everyone os eligable as President
-    if (!this.chaosElection) {
-      if (
-        chancellorIsDead ||
-        chancellorIsFormerChancellor ||
-        (moreThan5Alive && chancellorIsFormerPresident) // if fewer than 5 are alive, the former president can be chancellor
-      )
-        throw new Error('This chancellor can not be nominated');
+    if (
+      !this.chaosElection &&
+      (chancellorIsDead || chancellorIsFormerChancellor || (moreThan5Alive && chancellorIsFormerPresident)) // if fewer than 5 are alive, the former president can be chancellor
+    ) {
+      throw new Error('This chancellor can not be nominated');
     }
 
     this.lastChancellor = this.currentChancellor;
     this.currentChancellor = chancellor;
+    return this.currentChancellor;
   }
 
   resetNextChancellor() {
