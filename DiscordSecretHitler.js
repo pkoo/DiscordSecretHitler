@@ -41,12 +41,20 @@ module.exports = class DiscordSecretHitler {
         this.txtChan.send('The game is ready and starting now');
         this.client.user.setActivity('SecretHitler');
       })
+      .then(() => this.sendRolesAndParty())
       .then(() => this.electionPhaseStart())
       .catch((err) => {
         console.log(`ERROR while starting the game!\n${err}`);
         this.txtChan.send('ERROR: Could not start the game :-(');
         this.txtChan.send(`Error Message: ${err}`);
       });
+  }
+
+  async sendRolesAndParty() {
+    this.game.players.forEach((p) => {
+      if (p.isHitler()) this.userChat(p.user).send(`You are Hitler`);
+      this.userChat(p.user).send(`You are ${p.isFascist() ? 'Fascist' : 'Liberal'}`);
+    });
   }
 
   electionPhaseStart() {
