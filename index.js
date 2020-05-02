@@ -42,10 +42,10 @@ client.on('message', (message) => {
       'My current job is to offer a Discord Version of https://www.secrethitler.com/ ' +
         '\n\nCommands:\n' +
         '!new <Mention Players> - start a new game and add all mentioned players\n' +
-        '!add <mention players> - add the mentioned players to the game' +
-        '!start - starts the game' +
-        '!stop - the gameAdmin (initiator of !new) can always stop the game' +
-        '!info - this information'
+        '!add <mention players> - add the mentioned players to the game\n' +
+        '!start - starts the game\n' +
+        '!stop - the gameAdmin (initiator of !new) can always stop the game\n' +
+        '!info - this information\n'
     );
   }
 });
