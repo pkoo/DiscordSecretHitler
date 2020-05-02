@@ -99,12 +99,12 @@ module.exports = class SecretHitler {
     return this.currentPresident;
   }
 
-  async setSepcialPresident(pres) {
-    const pres = this.alivePlayers.filter((p) => p.user.id === pres.id);
-    if (pres.length === 0) {
+  async setSepcialPresident(discordPresident) {
+    const president = this.alivePlayers.filter((p) => p.user.id === discordPresident.id);
+    if (president.length === 0) {
       throw new Error('Could not find that player');
     }
-    this.specialElection = pres;
+    this.specialElection = president;
     return this.specialElection;
   }
 

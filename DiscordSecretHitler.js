@@ -28,8 +28,6 @@ module.exports = class DiscordSecretHitler {
         new Player(this.gameAdmin),
         new Player(this.gameAdmin),
         new Player(this.gameAdmin),
-        new Player(this.gameAdmin),
-        ...this.game.players,
       ];
     }
 
